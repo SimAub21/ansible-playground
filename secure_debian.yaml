@@ -1,0 +1,125 @@
+---
+- name: Hardening Debian 13 VPS (Fixed for Systemd & Journald)
+  hosts: all
+  become: true
+  vars:
+    ssh_port: "38274"           # Your chosen random port
+    created_user: "admin"  
+    ssh_public_key_path: "~/.ssh/id_ed25519.pub"
+    allowed_ports: ["{{ ssh_port }}"]
+
+  tasks:
+    - name: Update apt cache and perform dist-upgrade
+      apt:
+        update_cache: yes
+        upgrade: dist
+        autoremove: yes
+
+    - name: Install essential security packages
+      apt:
+        name: [ufw, fail2ban, unattended-upgrades, sudo, libpam-pwquality]
+        state: present
+
+    # --- DEBIAN 13 SYSTEMD SSH FIX ---
+    # By default, Debian 13 uses ssh.socket which ignores sshd_config Port settings.
+    # We must disable the socket and enable the service instead.
+    - name: Disable systemd SSH socket
+      systemd:
+        name: ssh.socket
+        state: stopped
+        enabled: no
+
+    - name: Enable traditional SSH service
+      systemd:
+        name: ssh.service
+        state: started
+        enabled: yes
+
+    # --- USER HARDENING ---
+    - name: Create the admin user
+      user:
+        name: "{{ created_user }}"
+        shell: /bin/bash
+        groups: sudo
+        append: yes
+
+    - name: Deploy local SSH public key to the server
+      authorized_key:
+        user: "{{ created_user }}"
+        state: present
+        key: "{{ lookup('file', ssh_public_key_path) }}"
+
+    - name: Allow sudo without password for admin user
+      lineinfile:
+        path: /etc/sudoers.d/{{ created_user }}
+        line: "{{ created_user }} ALL=(ALL) NOPASSWD:ALL"
+        validate: '/usr/sbin/visudo -cf %s'
+        create: yes
+
+    # --- SSH HARDENING ---
+    - name: Apply SSH security settings
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+      loop:
+        - { regexp: '^#?Port ', line: 'Port {{ ssh_port }}' }
+        - { regexp: '^#?PermitRootLogin ', line: 'PermitRootLogin no' }
+        - { regexp: '^#?PasswordAuthentication ', line: 'PasswordAuthentication no' }
+        - { regexp: '^#?PubkeyAuthentication ', line: 'PubkeyAuthentication yes' }
+      notify: Restart SSH
+
+    # --- FAIL2BAN (DEBIAN 13 FIX) ---
+    - name: Configure Fail2Ban with systemd backend
+      copy:
+        dest: /etc/fail2ban/jail.local
+        content: |
+          [DEFAULT]
+          # Debian 13 uses journald, so we must use the systemd backend
+          backend = systemd
+          bantime = 1h
+          maxretry = 3
+          banaction = ufw
+
+          [sshd]
+          enabled = true
+          port = {{ ssh_port }}
+
+          [recidive]
+          enabled = true
+          bantime = 1w
+          findtime = 1d
+          maxretry = 5
+      notify: Restart Fail2Ban
+
+    # --- FIREWALL (UFW) ---
+    - name: Configure UFW - Allow ports
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop: "{{ allowed_ports }}"
+
+    - name: Enable UFW with default deny policy
+      ufw:
+        state: enabled
+        policy: deny
+        direction: incoming
+
+    # --- AUTO UPDATES ---
+    - name: Ensure unattended-upgrades is running
+      systemd:
+        name: unattended-upgrades
+        state: started
+        enabled: yes
+
+  handlers:
+    - name: Restart SSH
+      service:
+        name: ssh
+        state: restarted
+
+    - name: Restart Fail2Ban
+      service:
+        name: fail2ban
+        state: restarted

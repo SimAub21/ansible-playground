@@ -1,0 +1,22 @@
+---
+- name: Update server
+  hosts: xen
+  become: true
+  
+  tasks:
+    - name: Update apt cache and perform dist-upgrade
+      apt:
+        update_cache: yes
+        upgrade: dist
+        autoremove: yes
+
+    - name: Install essential packages
+      apt:
+        name: [unattended-upgrades, sudo]
+        state: present
+
+    - name: Ensure unattended-upgrades is running
+      systemd:
+        name: unattended-upgrades
+        state: started
+        enabled: yes

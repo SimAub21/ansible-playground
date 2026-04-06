@@ -3,8 +3,8 @@
   hosts: all
   become: true
   vars:
-    ssh_port: "38274"           # Your chosen random port
-    created_user: "admin"  
+    ssh_port: "38274"
+    created_user: "user"
     ssh_public_key_path: "~/.ssh/id_ed25519.pub"
     allowed_ports: ["{{ ssh_port }}"]
 
@@ -17,10 +17,9 @@
 
     - name: Install essential security packages
       apt:
-        name: [ufw, fail2ban, unattended-upgrades, sudo, libpam-pwquality]
+        name: [ufw, fail2ban, unattended-upgrades, sudo]
         state: present
 
-    # --- DEBIAN 13 SYSTEMD SSH FIX ---
     # By default, Debian 13 uses ssh.socket which ignores sshd_config Port settings.
     # We must disable the socket and enable the service instead.
     - name: Disable systemd SSH socket
@@ -35,8 +34,7 @@
         state: started
         enabled: yes
 
-    # --- USER HARDENING ---
-    - name: Create the admin user
+    - name: Create the user account
       user:
         name: "{{ created_user }}"
         shell: /bin/bash
@@ -69,7 +67,7 @@
         - { regexp: '^#?PubkeyAuthentication ', line: 'PubkeyAuthentication yes' }
       notify: Restart SSH
 
-    # --- FAIL2BAN (DEBIAN 13 FIX) ---
+    # --- FAIL2BAN ---
     - name: Configure Fail2Ban with systemd backend
       copy:
         dest: /etc/fail2ban/jail.local

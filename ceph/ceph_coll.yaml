@@ -1,0 +1,54 @@
+# TODO: Currently not working, check cephadm ansible collection again
+---
+- name: Ceph Cluster Deployment via ceph.cephadm Collection
+  hosts: ceph_nodes
+  become: true
+  tasks:
+    - name: Installiere Docker und Python-Abhängigkeiten
+      apt:
+        name:
+          - docker.io
+          - python3
+          - python3-pip
+        state: present
+        update_cache: yes
+
+    - name: Installiere cephadm Paket
+      apt:
+        name: cephadm
+        state: present
+
+- name: Bootstrap Admin Node
+  hosts: admin_node
+  become: true
+  tasks:
+    - name: Bootstrap den Cluster
+      ceph.cephadm.cephadm_bootstrap:
+        mon_ip: "{{ ansible_host }}"
+        dashboard_user: admin
+        dashboard_password: "admin"
+      register: bootstrap_info
+
+    - name: Speichere den Ceph SSH-Key für die anderen Nodes
+      set_fact:
+        ceph_pub_key: "{{ bootstrap_info.client_key }}"
+
+- name: SSH-Key Verteilung & Host-Management
+  hosts: ceph_nodes
+  become: true
+  tasks:
+    - name: Verteile Ceph SSH-Key an alle Nodes (für Root)
+      authorized_key:
+        user: root
+        key: "{{ hostvars[groups['admin_node'][0]]['ceph_pub_key'] }}"
+
+- name: Hosts zum Orchestrator hinzufügen
+  hosts: admin_node
+  become: true
+  tasks:
+    - name: Füge Worker-Nodes zum Cluster hinzu
+      ceph.cephadm.ceph_orch_host:
+        name: "{{ item }}"
+        address: "{{ hostvars[item]['ansible_host'] }}"
+      loop: "{{ groups['ceph_nodes'] }}"
+      when: item != inventory_hostname

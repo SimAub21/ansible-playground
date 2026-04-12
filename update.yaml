@@ -1,6 +1,6 @@
 ---
 - name: Update server
-  hosts: xen
+  hosts: ceph_nodes
   become: true
   
   tasks:
@@ -9,14 +9,3 @@
         update_cache: yes
         upgrade: dist
         autoremove: yes
-
-    - name: Install essential packages
-      apt:
-        name: [unattended-upgrades, sudo]
-        state: present
-
-    - name: Ensure unattended-upgrades is running
-      systemd:
-        name: unattended-upgrades
-        state: started
-        enabled: yes

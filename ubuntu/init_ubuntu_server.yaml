@@ -1,0 +1,47 @@
+---
+- name: Harden Ubuntu Server and Setup Access
+  hosts: ubuntu_server
+  become: yes
+  vars:
+    target_user: "user"
+    ssh_keys:
+      - "{{ lookup('file', '~/.ssh/id_ed25519.pub') }}"
+      - "{{ lookup('file', '/mnt/Cloud/id_ed25519.pub') }}"
+
+  tasks:
+    # 1. Setup SSH Keys
+    - name: Deploy SSH Public Keys
+      ansible.posix.authorized_key:
+        user: "{{ target_user }}"
+        state: present
+        key: "{{ item }}"
+      loop: "{{ ssh_keys }}"
+
+    # 2. Enable Passwordless Sudo
+    - name: Create sudoers drop-in file for passwordless access
+      copy:
+        content: "{{ target_user }} ALL=(ALL) NOPASSWD:ALL"
+        dest: "/etc/sudoers.d/{{ target_user }}"
+        mode: '0440'
+        validate: /usr/sbin/visudo -cf %s
+
+    # 3. Disable Password Authentication
+    - name: Disable Password Authentication in sshd_config
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PasswordAuthentication'
+        line: 'PasswordAuthentication no'
+      notify: restart ssh
+
+    - name: Disable Keyboard Interactive Authentication (Standard on Ubuntu)
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?KbdInteractiveAuthentication'
+        line: 'KbdInteractiveAuthentication no'
+      notify: restart ssh
+
+  handlers:
+    - name: restart ssh
+      service:
+        name: ssh
+        state: restarted

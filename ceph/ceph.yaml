@@ -1,0 +1,66 @@
+---
+- name: Ceph Cluster Deployment
+  hosts: ceph_nodes
+  become: true
+  tasks:
+    - name: Install Docker, Python and Cephadm-Tools
+      apt:
+        name:
+          - docker.io
+          - python3
+          - python3-pip
+          - cephadm
+          - ceph-common
+        state: present
+        update_cache: yes
+
+- name: Bootstrap Admin Node
+  hosts: admin_node
+  become: true
+  tasks:
+    - name: Bootstrap den Cluster
+      command: >
+        cephadm bootstrap 
+        --mon-ip {{ ansible_host }}
+        --initial-dashboard-user admin
+        --initial-dashboard-password "admin"
+      args:
+        creates: /etc/ceph/ceph.conf
+
+    - name: Read generated ceph ssh key
+      command: cat /etc/ceph/ceph.pub
+      register: ceph_pub_key_result
+      changed_when: false
+
+    - name: Store key for other hosts
+      set_fact:
+        ceph_pub_key: "{{ ceph_pub_key_result.stdout }}"
+
+- name: SSH-Key Distribution & Host-Management
+  hosts: ceph_nodes
+  become: true
+  tasks:
+    - name: Distribute ceph ssh key for all nodes
+      authorized_key:
+        user: root
+        key: "{{ hostvars[groups['admin_node'][0]]['ceph_pub_key'] }}"
+
+- name: Add hosts to admin node
+  hosts: admin_node
+  become: true
+  tasks:
+    - name: Short break
+      pause:
+        seconds: 10
+
+    - name: Add worker nodes to cluster
+      command: "ceph orch host add {{ item }} {{ hostvars[item]['ansible_host'] }}"
+      loop: "{{ groups['ceph_nodes'] }}"
+      when: item != inventory_hostname
+      register: add_host_result
+      failed_when: 
+        - add_host_result.rc != 0
+        - "'already exists' not in add_host_result.stderr"
+      changed_when: 
+        - add_host_result.rc == 0
+        - "'already exists' not in add_host_result.stderr"

@@ -1,0 +1,37 @@
+---
+- name: Expand Ubuntu LVM Storage to Full Disk
+  hosts: ceph_nodes
+  become: yes
+  tasks:
+    - name: Install dependencies (cloud-guest-utils for growpart)
+      apt:
+        name: cloud-guest-utils
+        state: present
+        update_cache: yes
+
+    - name: Grow the partition to fill the physical disk
+      # We target /dev/xvda partition 3
+      shell: growpart /dev/xvda 3
+      register: growpart_out
+      # growpart returns 1 if the partition is already full size, so we handle that
+      failed_when: "growpart_out.rc != 0 and 'NOCHANGE' not in growpart_out.stdout"
+      changed_when: "'CHANGED' in growpart_out.stdout"
+
+    - name: Resize the LVM Physical Volume
+      shell: pvresize /dev/xvda3
+      changed_when: false
+
+    - name: Extend the Logical Volume to 100% of free space and resize filesystem
+      # The -r flag automatically runs resize2fs or xfs_growfs
+      shell: lvextend -l +100%FREE /dev/mapper/ubuntu--vg-ubuntu--lv -r
+      register: lvextend_out
+      changed_when: "'Size of logical volume' in lvextend_out.stdout"
+
+    - name: Verify new disk size
+      command: df -h /
+      register: final_size
+      changed_when: false
+
+    - name: Show final storage report
+      debug:
+        msg: "{{ final_size.stdout_lines }}"

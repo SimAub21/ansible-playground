@@ -1,0 +1,46 @@
+---
+- name: Hardening Debian 13
+  hosts: debian_prod
+  become: true
+  vars:
+    ssh_port: "22"
+    created_user: "user"
+    ssh_public_key_path: "~/.ssh/id_ed25519.pub"
+
+  tasks:
+    - name: Update apt cache and perform dist-upgrade
+      apt:
+        update_cache: yes
+        upgrade: dist
+        autoremove: yes
+
+    - name: Deploy local SSH public key to the server
+      authorized_key:
+        user: "{{ created_user }}"
+        state: present
+        key: "{{ lookup('file', ssh_public_key_path) }}"
+
+    - name: Allow sudo without password for our user
+      lineinfile:
+        path: /etc/sudoers.d/{{ created_user }}
+        line: "{{ created_user }} ALL=(ALL) NOPASSWD:ALL"
+        validate: '/usr/sbin/visudo -cf %s'
+        create: yes
+
+    - name: Apply SSH security settings
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+      loop:
+        - { regexp: '^#?Port ', line: 'Port {{ ssh_port }}' }
+        - { regexp: '^#?PermitRootLogin ', line: 'PermitRootLogin no' }
+        - { regexp: '^#?PasswordAuthentication ', line: 'PasswordAuthentication no' }
+        - { regexp: '^#?PubkeyAuthentication ', line: 'PubkeyAuthentication yes' }
+      notify: Restart SSH
+      
+  handlers:
+    - name: Restart SSH
+      service:
+        name: ssh
+        state: restarted

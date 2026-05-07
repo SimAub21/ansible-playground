@@ -1,6 +1,6 @@
 ---
-- name: Install Docker Engine on Debian
-  hosts: debian_prod
+- name: Install Docker Engine on Debian / Ubuntu
+  hosts: docker
   become: true
   vars:
     old_docker_packages:

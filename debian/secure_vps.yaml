@@ -1,0 +1,142 @@
+- name: Hardening Debian 13 VPS
+  hosts: vps
+  become: true
+  vars:
+    ssh_port: "38274"
+    created_user: "user"
+    ssh_public_key_path: "~/.ssh/id_ed25519.pub"
+    allowed_ports: ["{{ ssh_port }}"]
+
+  tasks:
+    - name: Update apt cache and perform dist-upgrade
+      apt:
+        update_cache: yes
+        upgrade: dist
+        autoremove: yes
+
+    - name: Install essential security packages
+      apt:
+        name: [ufw, fail2ban, unattended-upgrades, sudo, lynis]
+        state: present
+
+    - name: Ensure unattended-upgrades is running
+      systemd:
+        name: unattended-upgrades
+        state: started
+        enabled: yes
+
+    # --- SSH SOCKET FIX (Debian 13) ---
+    - name: Ensure traditional SSH service is used instead of socket
+      systemd:
+        name: "{{ item.name }}"
+        state: "{{ item.state }}"
+        enabled: "{{ item.enabled }}"
+      loop:
+        - { name: 'ssh.service', state: 'started', enabled: 'yes' }
+        - { name: 'ssh.socket', state: 'stopped', enabled: 'no' }
+
+    - name: Create the user account
+      user:
+        name: "{{ created_user }}"
+        shell: /bin/bash
+        groups: sudo
+        append: yes
+
+    - name: Deploy local SSH public key
+      authorized_key:
+        user: "{{ created_user }}"
+        state: present
+        key: "{{ lookup('file', ssh_public_key_path) }}"
+
+    - name: Allow sudo without password
+      copy:
+        content: "{{ created_user }} ALL=(ALL) NOPASSWD:ALL"
+        dest: "/etc/sudoers.d/{{ created_user }}"
+        mode: '0440'
+        validate: '/usr/sbin/visudo -cf %s'
+
+    # --- FIREWALL INITIALISIERUNG ---
+    - name: UFW - Allow Port 22 temporarily (Insurance)
+      ufw:
+        rule: allow
+        port: "22"
+        proto: tcp
+
+    - name: UFW - Allow production ports
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop: "{{ allowed_ports }}"
+
+    - name: Enable UFW with default deny
+      ufw:
+        state: enabled
+        policy: deny
+        direction: incoming
+
+    # --- SSH KONFIGURATION ---
+    - name: Apply SSH hardening settings
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+      loop:
+        - { regexp: '^#?Port ', line: 'Port {{ ssh_port }}' }
+        - { regexp: '^#?PermitRootLogin ', line: 'PermitRootLogin no' }
+        - { regexp: '^#?PasswordAuthentication ', line: 'PasswordAuthentication no' }
+        - { regexp: '^#?PubkeyAuthentication ', line: 'PubkeyAuthentication yes' }
+      notify: Restart SSH
+
+    # Enforce SSH restart
+    - name: Flush handlers to apply SSH port change now
+      meta: flush_handlers
+
+    # Tell ansible that ssh port has changed
+    - name: Update ansible_port for the rest of the playbook
+      set_fact:
+        ansible_port: "{{ ssh_port }}"
+
+    # --- FAIL2BAN ---
+    - name: Configure Fail2Ban (Systemd Backend)
+      copy:
+        dest: /etc/fail2ban/jail.local
+        content: |
+          [DEFAULT]
+          backend = systemd
+          bantime = 1h
+          maxretry = 3
+          banaction = ufw
+
+          [sshd]
+          enabled = true
+          port = {{ ssh_port }}
+      notify: Restart Fail2Ban
+
+    # --- Finish and cleanup ---
+    - name: Remove temporary Port 22 rule from UFW
+      ufw:
+        rule: allow
+        port: "22"
+        proto: tcp
+        delete: yes
+
+    - name: Run Lynis security audit
+      shell: lynis audit system --quick
+      register: lynis_result
+      failed_when: false
+
+    - name: Show Lynis Scan Location
+      debug:
+        msg: "Hardening finished. Lynis Report unter /var/log/lynis.log"
+
+  handlers:
+    - name: Restart SSH
+      service:
+        name: ssh
+        state: restarted
+
+    - name: Restart Fail2Ban
+      service:
+        name: fail2ban
+        state: restarted

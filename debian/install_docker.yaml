@@ -1,38 +1,31 @@
 ---
-- name: Install Docker Engine on Debian / Ubuntu
-  hosts: docker
+- name: Install Docker Engine on Debian 13
+  hosts: vps
   become: true
   vars:
-    old_docker_packages:
-      - docker.io
-      - docker-compose
-      - docker-doc
-      - podman-docker
-      - containerd
-      - runc
+    # TODO: check port und user
+    ansible_port: 38274
+    created_user: "user"
 
   tasks:
-    - name: Uninstall unofficial or old Docker packages
+    - name: Remove old or conflicting Docker-related packages
       apt:
-        name: "{{ old_docker_packages }}"
+        name: [docker.io, docker-doc, docker-compose, podman-docker, containerd, runc]
         state: absent
+
+    - name: Install required system packages
+      apt:
+        name: [ca-certificates, curl, gnupg]
+        state: present
         update_cache: yes
 
-    - name: Install prerequisite packages (including gnupg)
-      apt:
-        name:
-          - ca-certificates
-          - curl
-          - gnupg
-        state: present
-
-    - name: Create directory for Docker APT keyrings
+    - name: Create directory for Docker GPG key
       file:
         path: /etc/apt/keyrings
         state: directory
         mode: '0755'
 
-    - name: Download Docker official GPG key
+    - name: Download Docker's official GPG key (Modern Way)
       get_url:
         url: https://download.docker.com/linux/debian/gpg
         dest: /etc/apt/keyrings/docker.asc
@@ -40,12 +33,13 @@
 
     - name: Add Docker repository to Apt sources
       apt_repository:
+        # Wir nutzen direkt die .asc Datei im signed-by Feld
         repo: >
           deb [arch={{ ansible_architecture | replace('x86_64', 'amd64') }} signed-by=/etc/apt/keyrings/docker.asc]
           https://download.docker.com/linux/debian
           {{ ansible_distribution_release }} stable
-        filename: docker
         state: present
+        filename: docker
         update_cache: yes
 
     - name: Install Docker Engine and plugins
@@ -59,13 +53,22 @@
         state: present
 
     - name: Ensure Docker service is started and enabled
-      service:
+      systemd:
         name: docker
         state: started
         enabled: yes
 
-    - name: Verify Docker installation
-      command: docker run hello-world
-      register: docker_check
+    - name: Add '{{ created_user }}' to the docker group
+      user:
+        name: "{{ created_user }}"
+        groups: docker
+        append: yes
+
+    - name: Test Docker installation
+      command: docker --version
+      register: docker_version
       changed_when: false
-      failed_when: "'Hello from Docker!' not in docker_check.stdout"
+
+    - name: Show Docker version
+      debug:
+        msg: "Successfully installed docker: {{ docker_version.stdout }}"

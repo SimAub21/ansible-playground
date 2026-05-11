@@ -1,0 +1,67 @@
+---
+- name: Setup Secure Minecraft Paper Server
+  hosts: vps
+  become: yes
+  vars:
+    mc_user: "user"
+    mc_path: "/home/{{ mc_user }}/mc"
+    ssh_port: 38274
+    mc_port: 25565
+    java_version: "openjdk-25-jre-headless"
+
+  tasks:
+    - name: Install needed packages
+      apt:
+        name:
+          - "{{ java_version }}"
+          - ufw
+          - fail2ban
+          - screen
+        state: present
+        update_cache: yes
+
+    - name: UFW - Allow minecraft port
+      ufw:
+        rule: allow
+        port: "{{ mc_port }}"
+        proto: tcp
+
+    - name: Create directory
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ mc_user }}"
+        group: "{{ mc_user }}"
+      loop:
+        - "{{ mc_path }}"
+
+    # --- Fail2Ban for minecraft port---
+
+    - name: Prüfe ob jail.local existiert
+      stat:
+        path: /etc/fail2ban/jail.local
+      register: jail_file
+
+    - name: Abort if jail.local missing
+      fail:
+        msg: "ERROR: File /etc/fail2ban/jail.local not found!"
+      when: not jail_file.stat.exists
+
+    - name: Fail2ban Filter Configuration
+      template:
+        src: templates/minecraft_filter.conf.j2
+        dest: /etc/fail2ban/filter.d/minecraft.conf
+      notify: restart fail2ban
+
+    - name: Add minecraft block to jail.local
+      blockinfile:
+        path: /etc/fail2ban/jail.local
+        marker: "# {mark} ANSIBLE MANAGED BLOCK: MINECRAFT"
+        block: "{{ lookup('template', 'templates/minecraft_jail.local.j2') }}"
+      notify: restart fail2ban
+
+  handlers:
+    - name: restart fail2ban
+      service:
+        name: fail2ban
+        state: restarted

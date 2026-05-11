@@ -111,6 +111,7 @@
           [sshd]
           enabled = true
           port = {{ ssh_port }}
+          mode = aggressive
       notify: Restart Fail2Ban
 
     # --- Finish and cleanup ---

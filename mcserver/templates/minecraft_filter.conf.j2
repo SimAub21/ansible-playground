@@ -1,0 +1,9 @@
+[INCLUDES]
+before = common.conf
+
+[Definition]
+failregex = ^.*\[Server thread/INFO\]: .*\[/<HOST>:\d+\] .* lost connection: You are not whitelisted on this server!$
+            ^.*\[Server thread/INFO\]: Disconnecting .* \[/<HOST>:\d+\]: Failed to verify username!$
+            ^.*\[Server thread/INFO\]: .*\[/<HOST>:\d+\] .* lost connection: Internal Exception: io.netty.handler.codec.DecoderException:.*$
+
+ignoreregex =

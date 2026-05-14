@@ -1,0 +1,26 @@
+- name: Setup Fail2Ban for Nginx
+  hosts: vps
+  become: yes
+  tasks:
+    - name: Ensure Fail2Ban is installed
+      apt:
+        name: fail2ban
+        state: present
+
+    - name: Create Nginx Catch-All Filter
+      template:
+        src: templates/fail2ban_nginx_catchall.conf.j2
+        dest: /etc/fail2ban/filter.d/nginx-catchall.conf
+      notify: Restart Fail2Ban
+
+    - name: Configure Nginx Jails
+      template:
+        src: templates/fail2ban_nginx.local.j2
+        dest: /etc/fail2ban/jail.d/nginx.local
+      notify: Restart Fail2Ban
+
+  handlers:
+    - name: Restart Fail2Ban
+      service:
+        name: fail2ban
+        state: restarted

@@ -1,0 +1,84 @@
+---
+- name: Nginx Reverse Proxy Setup with Let's Encrypt (Cloudflare)
+  hosts: vps
+  become: yes
+
+  vars:
+    base_domain: "auburger.cc"
+    le_email: "simreiaub5@gmail.com"
+    cf_api_token: "cf_api_token" # TODO: look up and replace or use ansible vault one day :)
+    
+    webapps:
+      - subdomain: "testpage"
+        backend_port: 8080
+
+  tasks:
+    - name: Install required packages
+      apt:
+        name:
+          - nginx
+          - certbot
+          - python3-certbot-dns-cloudflare
+        state: present
+        update_cache: yes
+
+    - name: Create folder for Cloudflare Credentials
+      file:
+        path: /etc/letsencrypt
+        state: directory
+        mode: '0755'
+
+    - name: Create Cloudflare API Token File
+      copy:
+        dest: /etc/letsencrypt/cloudflare.ini
+        content: "dns_cloudflare_api_token = {{ cf_api_token }}\n"
+        mode: '0600'
+
+    - name: Get Wildcard-Certificate via Cloudflare DNS Challenge
+      command: >
+        certbot certonly --dns-cloudflare 
+        --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini 
+        -d "{{ base_domain }}" -d "*.{{ base_domain }}" 
+        --email {{ le_email }} --agree-tos --non-interactive
+      args:
+        creates: "/etc/letsencrypt/live/{{ base_domain }}/fullchain.pem"
+
+    - name: Remove default Nginx page
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      notify: Reload Nginx
+
+    - name: Create Catch-All Server
+      template:
+        src: templates/nginx_default.conf.j2
+        dest: /etc/nginx/sites-available/00-default.conf
+      notify: Reload Nginx
+
+    - name: Activate Catch-All Server
+      file:
+        src: /etc/nginx/sites-available/00-default.conf
+        dest: /etc/nginx/sites-enabled/00-default.conf
+        state: link
+      notify: Reload Nginx
+
+    - name: Create Nginx configuration for all web pages
+      template:
+        src: templates/nginx_proxy.conf.j2
+        dest: "/etc/nginx/sites-available/{{ item.subdomain }}.{{ base_domain }}.conf"
+      loop: "{{ webapps }}"
+      notify: Reload Nginx
+
+    - name: Create symlinks for webapps
+      file:
+        src: "/etc/nginx/sites-available/{{ item.subdomain }}.{{ base_domain }}.conf"
+        dest: "/etc/nginx/sites-enabled/{{ item.subdomain }}.{{ base_domain }}.conf"
+        state: link
+      loop: "{{ webapps }}"
+      notify: Reload Nginx
+
+  handlers:
+    - name: Reload Nginx
+      systemd:
+        name: nginx
+        state: reloaded

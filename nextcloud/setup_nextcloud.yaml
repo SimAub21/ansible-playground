@@ -1,0 +1,49 @@
+---
+- name: Nextcloud Nginx Reverse Proxy and Fail2Ban Setup
+  hosts: vps
+  become: yes
+  vars:
+    base_domain: "auburger.cc"
+    nextcloud_subdomain: "cloud"
+
+  tasks:
+    - name: Generate Diffie-Hellman Parameter # Instead of doing curl -L https://ssl-config.mozilla.org/ffdhe2048.txt -o /etc/dhparam
+      command: openssl dhparam -out /etc/dhparam 2048
+      args:
+        creates: /etc/dhparam
+
+    - name: Create Nginx configuration from template
+      template:
+        src: templates/nextcloud.conf.j2
+        dest: "/etc/nginx/sites-available/nextcloud.conf"
+      notify: Reload Nginx
+
+    - name: Activate Nginx configuration
+      file:
+        src: "/etc/nginx/sites-available/nextcloud.conf"
+        dest: "/etc/nginx/sites-enabled/nextcloud.conf"
+        state: link
+      notify: Reload Nginx
+
+    - name: Create Fail2Ban Nextcloud filter
+      template:
+        src: templates/nextcloud_filter.j2
+        dest: /etc/fail2ban/filter.d/nextcloud.conf
+      notify: Restart Fail2Ban
+
+    - name: Create Fail2Ban Nextcloud jail
+      template:
+        src: templates/nextcloud_jail.j2
+        dest: /etc/fail2ban/jail.d/nextcloud.local
+      notify: Restart Fail2Ban
+
+  handlers:
+    - name: Reload Nginx
+      service:
+        name: nginx
+        state: reloaded
+
+    - name: Restart Fail2Ban
+      service:
+        name: fail2ban
+        state: restarted

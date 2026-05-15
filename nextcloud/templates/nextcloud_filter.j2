@@ -1,0 +1,6 @@
+{% raw %}
+[Definition]
+_groupsre = (?:(?:,?\s*"\w+":(?:"[^"]+"|\d+|\[[^\]]+\]|{[^}]+}))*)
+failregex = ^\{%(_groupsre)s\s*"method":"POST"%(_groupsre)s\s*"message":"Login failed:.*remoteAddr":"<HOST>"%(_groupsre)s\}$
+ignoreregex =
+{% endraw %}

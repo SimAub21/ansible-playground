@@ -1,0 +1,39 @@
+---
+- name: Install and start Prometheus Node Exporter
+  hosts: prometheus-test-group
+  become: true
+
+  tasks:
+    - name: Update apt package chache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Install prometheus-node-exporter via apt
+      ansible.builtin.apt:
+        name: prometheus-node-exporter
+        state: present
+
+    - name: Ensure node exporter running and in autostart
+      ansible.builtin.systemd:
+        name: prometheus-node-exporter
+        state: started
+        enabled: true
+
+    - name: Ensure that ufw is installed
+      ansible.builtin.apt:
+        name: ufw
+        state: present
+  
+    - name: Allow Port 9100
+      community.general.ufw:
+        rule: allow
+        port: '9100'
+        proto: tcp
+        comment: Prometheus Node Exporter
+
+    - name: Check Connection to Port 9100
+      ansible.builtin.wait_for:
+        port: 9100
+        timeout: 5
+        msg: "Node Exporter does not reply to Port 9100"

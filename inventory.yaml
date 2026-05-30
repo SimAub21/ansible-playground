@@ -1,0 +1,72 @@
+all:
+  children:
+    prometheus-test-group: # TODO: check if it is possible to have a group of hosts without having them more than one time in inventory
+      hosts:
+        docker-prod-1:
+          ansible_host: 192.168.178.56
+          ansible_user: root
+        docker-prod-2:
+          ansible_host: 192.168.178.79
+          ansible_user: root
+        raspberry:
+          ansible_host: 192.168.178.63
+          ansible_user: pi
+        openmediavault:
+          ansible_host: 192.168.178.57
+          ansible_user: root
+
+    infrasturcture:
+      hosts:
+        proxmox-hp:
+          ansible_host: 192.168.178.50
+          ansible_user: root
+        proxmoxbackupserver:
+          ansibel_host: 192.168.178.60
+          ansible_user: root
+        
+    debian_lxc_prod:
+      hosts:
+        gitea:
+          ansible_host: 192.168.178.54
+          ansible_user: root
+        pihole:
+          ansible_host: 192.168.178.55
+          ansible_user: root
+        wireguard:
+          ansible_host: 192.168.178.75
+          ansible_user: root
+
+    docker_server:
+      hosts:
+        docker-prod-1:
+          ansible_host: 192.168.178.56
+          ansible_user: root
+        docker-prod-2:
+          ansible_host: 192.168.178.79
+          ansible_user: root
+        srv-prod-1:
+          ansible_host: 192.168.178.80
+          ansible_user: user
+
+    debian_vms:
+      hosts:
+        openmediavault:
+          ansible_host: 192.168.178.57
+          ansible_user: root
+        jellyfin:
+          ansible_host: 192.168.178.61
+          ansible_user: root
+        tvheadend:
+          ansible_host: 192.168.178.69
+          ansible_user: root
+    
+    baremetal:
+      hosts:
+        ubuntu-prod-1:
+          ansible_host: 192.168.178.33
+          ansible_user: user
+        raspberry:
+          ansible_host: 192.168.178.63
+          ansible_user: pi
+
+    # TODO: add group for testing vms

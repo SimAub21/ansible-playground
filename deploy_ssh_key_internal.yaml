@@ -1,0 +1,21 @@
+---
+- name: Copy ssh key to debian
+  hosts: all
+  become: true
+  vars:
+    created_user: "root"
+    ssh_arch_path: "~/.ssh/id_ed25519.pub" # TODO: refactor in future, for now enough and working fine
+    ssh_thinkpad_path: "/mnt/Cloud/Heimnetzwerk/publickeys/thinkpad.pub"
+
+  tasks:
+    - name: Deploy linuxarch SSH public key to the server
+      authorized_key:
+        user: "{{ created_user }}"
+        state: present
+        key: "{{ lookup('file', ssh_arch_path) }}"
+
+    - name: Deploy thinkpad SSH public key to the server
+      authorized_key:
+        user: "{{ created_user }}"
+        state: present
+        key: "{{ lookup('file', ssh_thinkpad_path) }}"

@@ -1,6 +1,6 @@
 ---
 - name: Update server
-  hosts: ceph_nodes
+  hosts: all
   become: true
   
   tasks:

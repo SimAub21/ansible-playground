@@ -1,0 +1,5 @@
+[sshd]
+enabled   = true
+port      = {{ ansible_port | default(22) }}
+mode      = aggressive
+banaction = ufw

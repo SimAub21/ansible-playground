@@ -1,4 +1,4 @@
-- name: Setup Fail2Ban for Nginx
+- name: Setup Fail2Ban
   hosts: vps
   become: yes
   tasks:
@@ -7,17 +7,17 @@
         name: fail2ban
         state: present
         update_cache: yes
-
-    - name: Create Nginx Catch-All Filter
+    
+    - name: Configure Fail2Ban Global Defaults
       template:
-        src: templates/fail2ban_nginx_catchall.conf.j2
-        dest: /etc/fail2ban/filter.d/nginx-catchall.conf
+        src: templates/defaults.local.j2
+        dest: /etc/fail2ban/jail.d/defaults.local
       notify: Restart Fail2Ban
 
-    - name: Configure Nginx Jails
+    - name: Configure SSH Jail
       template:
-        src: templates/fail2ban_nginx.local.j2
-        dest: /etc/fail2ban/jail.d/nginx.local
+        src: templates/sshd.local.j2
+        dest: /etc/fail2ban/jail.d/sshd.local
       notify: Restart Fail2Ban
 
   handlers:

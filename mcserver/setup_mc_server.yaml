@@ -37,15 +37,13 @@
 
     # --- Fail2Ban for minecraft port---
 
-    - name: Prüfe ob jail.local existiert
-      stat:
-        path: /etc/fail2ban/jail.local
-      register: jail_file
+    - name: Check if fail2ban is installed
+      ansible.builtin.service_facts:
 
-    - name: Abort if jail.local missing
-      fail:
-        msg: "ERROR: File /etc/fail2ban/jail.local not found!"
-      when: not jail_file.stat.exists
+    - name: Notify in case of fail2ban is not installed
+      ansible.builtin.debug:
+        msg: "NOTE: fail2ban is not installed, minecraft config is skipped!"
+      when: "'fail2ban' not in ansible_facts.services"
 
     - name: Fail2ban Filter Configuration
       template:
@@ -53,11 +51,10 @@
         dest: /etc/fail2ban/filter.d/minecraft.conf
       notify: restart fail2ban
 
-    - name: Add minecraft block to jail.local
-      blockinfile:
-        path: /etc/fail2ban/jail.local
-        marker: "# {mark} ANSIBLE MANAGED BLOCK: MINECRAFT"
-        block: "{{ lookup('template', 'templates/minecraft_jail.local.j2') }}"
+    - name: Fail2ban Jail Configuration
+      template:
+        src: templates/minecraft_jail.local.j2
+        dest: /etc/fail2ban/jail.d/minecraft.local
       notify: restart fail2ban
 
   handlers:

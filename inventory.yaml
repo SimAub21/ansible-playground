@@ -59,6 +59,9 @@ all:
         tvheadend:
           ansible_host: 192.168.178.69
           ansible_user: root
+        srv-prod-2:
+          ansible_host: 192.168.178.82
+          ansible_user: user
     
     baremetal:
       hosts:
